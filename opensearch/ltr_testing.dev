@@ -1,0 +1,240 @@
+# Some useful templates and queries for testing LTR
+POST _scripts/ltr_log_template
+{
+  "script": {
+    "lang": "mustache",
+    "source": {
+      "size": 1,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "terms": {
+                "sku": [
+                  "{{sku}}"
+                ]
+              }
+            },
+            {
+              "sltr": {
+                "_name": "logged_featureset",
+                "featureset": "bbuy_main_featureset",
+                "store": "week1",
+                "params": {
+                  "keywords": "{{user_query}}"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "ext": {
+        "ltr_log": {
+          "log_specs": {
+            "name": "log_entry",
+            "named_query": "logged_featureset"
+          }
+        }
+      }
+    }
+  },
+  "params": {
+    "user_query": "",
+    "sku": ""
+  }
+}
+
+POST _scripts/ltr_template
+{
+  "script": {
+    "lang": "mustache",
+    "source": {
+      "size": 500,
+      "sort": [
+        {
+          "_score": {
+            "order": "desc"
+          }
+        }
+      ],
+      "query": {
+        "function_score": {
+          "query": {
+            "bool": {
+              "must": [],
+              "should": [
+                {
+                  "match": {
+                    "name": {
+                      "query": "{{user_query}}",
+                      "fuzziness": "1",
+                      "prefix_length": 2,
+                      "boost": 0.01
+                    }
+                  }
+                },
+                {
+                  "match_phrase": {
+                    "name.hyphens": {
+                      "query": "{{user_query}}",
+                      "slop": 1,
+                      "boost": 50
+                    }
+                  }
+                },
+                {
+                  "multi_match": {
+                    "query": "{{user_query}}",
+                    "type": "phrase",
+                    "slop": "6",
+                    "minimum_should_match": "2<75%",
+                    "fields": [
+                      "name^10",
+                      "name.hyphens^10",
+                      "shortDescription^5",
+                      "longDescription^5",
+                      "department^0.5",
+                      "sku",
+                      "manufacturer",
+                      "features",
+                      "categoryPath",
+                      "name_analogies"
+                    ]
+                  }
+                },
+                {
+                  "terms": {
+                    "sku": ["\"{{#user_query_split}}\",\"{{/user_query_split}}\""],
+                    "boost": 50.0
+                  }
+                },
+                {
+                  "match": {
+                    "name.hyphens": {
+                      "query": "{{user_query}}",
+                      "operator": "OR",
+                      "minimum_should_match": "2<75%"
+                    }
+                  }
+                },
+                {
+                  "query_string": {
+                    "query": "{{prior_skus}}",
+                    "fields": [
+                      "_id"
+                    ]
+                  }
+                }
+              ],
+              "minimum_should_match": 1
+            }
+          },
+          "boost_mode": "multiply",
+          "score_mode": "sum",
+          "functions": [
+            {
+              "filter": {
+                "exists": {
+                  "field": "salesRankShortTerm"
+                }
+              },
+              "gauss": {
+                "salesRankShortTerm": {
+                  "origin": "1.0",
+                  "scale": "100"
+                }
+              }
+            },
+            {
+              "filter": {
+                "exists": {
+                  "field": "salesRankMediumTerm"
+                }
+              },
+              "gauss": {
+                "salesRankMediumTerm": {
+                  "origin": "1.0",
+                  "scale": "1000"
+                }
+              }
+            },
+            {
+              "filter": {
+                "exists": {
+                  "field": "salesRankLongTerm"
+                }
+              },
+              "gauss": {
+                "salesRankLongTerm": {
+                  "origin": "1.0",
+                  "scale": "1000"
+                }
+              }
+            },
+            {
+              "script_score": {
+                "script": "0.0001"
+              }
+            }
+          ]
+        }
+      },
+      "_source": [
+        "sku",
+        "name"
+      ],
+      "rescore": {
+        "window_size": 500,
+        "query": {
+          "rescore_query": {
+            "sltr": {
+              "params": {
+                "keywords": "{{user_query}}",
+                "click_prior_query": "{{prior_skus}}"
+              },
+              "model": "ltr_model",
+              "store": "week1"
+            }
+          },
+          "score_mode": "total",
+          "query_weight": 0,
+          "rescore_query_weight": 1
+        }
+      }
+    }
+  },
+  "params": {
+    "user_query": "",
+    "user_query_split": [],
+    "prior_skus": []
+  }
+}
+
+GET bbuy_products/_search/template
+{
+  "id": "ltr_template",
+  "params": {
+    "user_query": "playstation",
+    "user_query_split": ["playstation"],
+    "prior_skus": "  "
+  }
+}
+
+GET bbuy_products/_search/template
+{
+  "id": "ltr_log_template",
+  "params": {
+    "user_query": "wii",
+    "sku": "2803428"
+  }
+}
+
+GET bbuy_products/_search/template
+{
+  "id": "ltr_log_template",
+  "params": {
+    "user_query": "wii",
+    "sku": "8863296"
+  }
+}
+
