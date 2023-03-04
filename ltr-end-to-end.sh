@@ -5,7 +5,7 @@ usage()
   exit 2
 }
 
-SOURCE_DIR="/workspace/search_with_machine_learning_course"
+SOURCE_DIR="/workspace/ml_ml"
 WEEK="week1"
 OUTPUT_DIR="/workspace/ltr_output"
 ALL_CLICKS_FILE="/workspace/datasets/train.csv"
