@@ -5,10 +5,12 @@ from tqdm import tqdm
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from collections import defaultdict
+
 
 def transform_name(product_name):
     # IMPLEMENT
-    return product_name
+    return product_name.lower().strip()
 
 # Directory for product data
 directory = r'/workspace/datasets/product_data/products/'
@@ -32,7 +34,7 @@ if os.path.isdir(output_dir) == False:
 if args.input:
     directory = args.input
 # IMPLEMENT: Track the number of items in each category and only output if above the min
-min_products = args.min_products
+min_products = int(args.min_products)
 names_as_labels = False
 if args.label == 'name':
     names_as_labels = True
@@ -61,9 +63,21 @@ def _label_filename(filename):
 if __name__ == '__main__':
     files = glob.glob(f'{directory}/*.xml')
     print("Writing results to %s" % output_file)
+    categories = defaultdict(list)
+
     with multiprocessing.Pool() as p:
         all_labels = tqdm(p.imap(_label_filename, files), total=len(files))
-        with open(output_file, 'w') as output:
-            for label_list in all_labels:
-                for (cat, name) in label_list:
-                    output.write(f'__label__{cat} {name}\n')
+
+        for label_list in all_labels:
+            for cat, product in label_list:
+                categories[cat].append(product)
+
+    result = []
+    for cat, products in categories.items():
+        if len(products) > min_products:
+            for product in products: 
+                result.append(f'__label__{cat} {product}\n')
+    
+    with open(output_file, 'w') as output:
+        output.writelines(result)
+        
