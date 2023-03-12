@@ -3,8 +3,7 @@ import argparse
 from pathlib import Path
 
 def transform_training_data(title, comment):
-    # IMPLEMENT
-    return title + ' ' + comment
+    return title.lower().strip()
 
 
 # Directory for review data
