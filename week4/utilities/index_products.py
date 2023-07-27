@@ -15,12 +15,15 @@ import requests
 import json
 
 from time import perf_counter
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
 
-# IMPLEMENT ME: import the sentence transformers module!
+logger.info("Creating Model")
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+
 
 # NOTE: this is not a complete list of fields.  If you wish to add more, put in the appropriate XPath expression.
 #TODO: is there a way to do this using XPath/XSL Functions so that we don't have to maintain a big list?
@@ -85,7 +88,6 @@ mappings =  [
         ]
 
 def get_opensearch():
-
     host = 'localhost'
     port = 9200
     auth = ('admin', 'admin')
@@ -105,13 +107,9 @@ def get_opensearch():
 
 
 def index_file(file, index_name, reduced=False):
-    logger.info("Creating Model")
-    # IMPLEMENT ME: instantiate the sentence transformer model!
-    
     logger.info("Ready to index")
 
     docs_indexed = 0
-    client = get_opensearch()
     logger.info(f'Processing file : {file}')
     tree = etree.parse(file)
     root = tree.getroot()
@@ -139,16 +137,26 @@ def index_file(file, index_name, reduced=False):
         docs.append({'_index': index_name, '_id':doc['sku'][0], '_source' : doc})
         #docs.append({'_index': index_name, '_source': doc})
         docs_indexed += 1
+        names.append(doc["name"][0])
         if docs_indexed % 200 == 0:
-            logger.info("Indexing")
-            bulk(client, docs, request_timeout=60)
-            logger.info(f'{docs_indexed} documents indexed')
+            index_with_embeddings(docs, names)
             docs = []
             names = []
     if len(docs) > 0:
-        bulk(client, docs, request_timeout=60)
+        index_with_embeddings(docs, names)
         logger.info(f'{docs_indexed} documents indexed')
     return docs_indexed
+
+
+def index_with_embeddings(docs, names):
+    client = get_opensearch()
+    logger.info("Indexing")
+    embeddings = model.encode(names)
+    for idx, doc in enumerate(docs):
+        doc["_source"]["embedding"] = embeddings[idx]
+    bulk(client, docs, request_timeout=60)
+    logger.info(f'{docs_indexed} documents indexed')
+
 
 @click.command()
 @click.option('--source_dir', '-s', default='/workspace/datasets/product_data/products'. help='XML files source directory')
